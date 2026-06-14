@@ -181,6 +181,23 @@
   .sync-row{display:flex;gap:10px}
   .sync-row button{flex:1}
 
+  /* date picker + editable history */
+  input[type=date]{color-scheme:dark}
+  .datebar{display:flex;align-items:center;gap:12px;margin-bottom:16px;background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--r-sm);padding:11px 14px}
+  .datebar label{font-size:12.5px;color:var(--muted);font-weight:600;flex-shrink:0}
+  .datebar input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:9px;
+    padding:10px 12px;color:var(--txt);font-weight:500}
+  .datebar input:focus{outline:none;border-color:var(--accent)}
+  .hist{cursor:pointer}
+  .hist .chev{color:var(--faint);font-size:12px;flex-shrink:0}
+  .hist-detail{background:var(--bg);border:1px solid var(--line);border-radius:13px;
+    padding:15px;margin:2px 0 14px}
+  .hist-detail .ex-name{margin-bottom:8px}
+  .del-x{font-size:11.5px;color:var(--faint);padding:3px 9px;border:1px solid var(--line);
+    border-radius:7px;flex-shrink:0;font-weight:600}
+  .del-x:active{color:var(--accent);border-color:var(--accent)}
+
   /* toast */
   #toast{position:fixed;left:50%;bottom:calc(94px + env(safe-area-inset-bottom));
     transform:translateX(-50%) translateY(20px);background:var(--good);color:#062013;
@@ -295,13 +312,21 @@ function save(){
    the user's own Drive. Strategy: pull on connect, push on save,
    last-write-wins by updatedAt.
    ============================================================ */
-const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.appdata';
+const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/userinfo.email';
 const FILE_NAME='recomp-data.json';
+const LK_LINK='recomp_drive', LK_EMAIL='recomp_drive_email', LK_TOK='recomp_drive_tok';
 let tokenClient=null, gToken=null, gExpiry=0, driveFileId=null, pendingResolve=null, pushTimer=null;
-let initTries=0;
+let initTries=0, hintEmail=localStorage.getItem(LK_EMAIL)||'';
 
 function cloudConfigured(){return CLIENT_ID && CLIENT_ID.indexOf('PASTE_')<0;}
 function connected(){return !!gToken && Date.now()<gExpiry-60000;}
+
+function restoreToken(){
+  try{const t=JSON.parse(localStorage.getItem(LK_TOK)||'null');
+    if(t&&t.e&&Date.now()<t.e-60000){gToken=t.t;gExpiry=t.e;return true;}}catch(e){}
+  return false;
+}
+function storeToken(){try{localStorage.setItem(LK_TOK,JSON.stringify({t:gToken,e:gExpiry}));}catch(e){}}
 
 function cloudInit(){
   if(!cloudConfigured())return;
@@ -312,21 +337,30 @@ function cloudInit(){
     client_id:CLIENT_ID, scope:DRIVE_SCOPE,
     callback:(r)=>{
       if(r&&r.access_token){gToken=r.access_token;gExpiry=Date.now()+((r.expires_in||3600)*1000);
-        localStorage.setItem('recomp_drive','1');}
+        localStorage.setItem(LK_LINK,'1');storeToken();captureEmail();}
       const f=pendingResolve;pendingResolve=null;if(f)f(connected());
     },
     error_callback:()=>{const f=pendingResolve;pendingResolve=null;if(f)f(false);}
   });
-  if(localStorage.getItem('recomp_drive')==='1'){
-    getToken(false).then(ok=>{ if(ok)syncNow().then(()=>refreshAll()); else refreshDataView(); });
+  // already linked? reuse a stored token if still valid, else refresh silently with the saved account hint
+  if(localStorage.getItem(LK_LINK)==='1'){
+    if(restoreToken()){ syncNow().then(()=>refreshAll()); }
+    else getToken(false).then(ok=>{ if(ok)syncNow().then(()=>refreshAll()); else refreshDataView(); });
   }
+}
+function captureEmail(){
+  if(hintEmail)return;
+  fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+gToken}})
+    .then(r=>r.json()).then(j=>{ if(j&&j.email){hintEmail=j.email;localStorage.setItem(LK_EMAIL,j.email);} }).catch(()=>{});
 }
 function getToken(interactive){
   return new Promise(res=>{
     if(connected())return res(true);
     if(!tokenClient)return res(false);
     pendingResolve=res;
-    try{tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
+    // interactive first-time = let the user pick the account; afterwards stay silent and pinned to that account
+    const cfg=interactive?{prompt:'consent'}:{prompt:'',hint:hintEmail||undefined};
+    try{tokenClient.requestAccessToken(cfg);}
     catch(e){pendingResolve=null;res(false);}
     setTimeout(()=>{if(pendingResolve){const f=pendingResolve;pendingResolve=null;f(connected());}},7000);
   });
@@ -376,7 +410,7 @@ async function syncNow(){
   }catch(e){return false;}
 }
 function schedulePush(){
-  if(!cloudConfigured()||localStorage.getItem('recomp_drive')!=='1')return;
+  if(!cloudConfigured()||localStorage.getItem(LK_LINK)!=='1')return;
   clearTimeout(pushTimer);
   pushTimer=setTimeout(async()=>{
     if(!(await ensureToken()))return;
@@ -393,8 +427,8 @@ async function connectDrive(){
 }
 function disconnectDrive(){
   try{if(window.google&&gToken)google.accounts.oauth2.revoke(gToken,()=>{});}catch(e){}
-  gToken=null;gExpiry=0;driveFileId=null;
-  localStorage.removeItem('recomp_drive');
+  gToken=null;gExpiry=0;driveFileId=null;hintEmail='';
+  localStorage.removeItem(LK_LINK);localStorage.removeItem(LK_EMAIL);localStorage.removeItem(LK_TOK);
   toast('Disconnected');
 }
 function timeAgo(ts){
@@ -424,10 +458,15 @@ function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show'
   clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove('show'),1700);}
 const CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12l5 5L20 6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
+function sortedSessions(){return state.sessions.slice().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);}
 function lastSession(w){
-  for(let i=state.sessions.length-1;i>=0;i--)if(state.sessions[i].w===w)return state.sessions[i];
-  return null;
+  let best=null;
+  state.sessions.forEach(s=>{if(s.w===w&&(!best||s.date>best.date))best=s;});
+  return best;
 }
+function keyOf(s){return s.id||('d'+s.date+s.w);}
+function findSession(k){return state.sessions.find(s=>keyOf(s)===k);}
+function sessionIndex(k){return state.sessions.findIndex(s=>keyOf(s)===k);}
 function suggestedFriday(){
   const a=lastSession('A'),b=lastSession('B');
   if(!a)return 'A';if(!b)return 'B';
@@ -514,6 +553,8 @@ function stepsThisWeek(){
 
 /* ---------- TRAIN ---------- */
 let draft=null; // {w, entries:{id:[{...}]}}
+let draftDate=TODAY;
+let histEdit=null; // {key,w,date,entries}
 function startDraft(w){
   const last=lastSession(w);
   const entries={};
@@ -528,6 +569,7 @@ function startDraft(w){
     }
   });
   draft={w,entries};
+  draftDate=TODAY;
 }
 function renderTrain(){
   const v=$('#v-train');v.innerHTML='';
@@ -542,6 +584,13 @@ function renderTrain(){
     seg.appendChild(b);
   });
   v.appendChild(seg);
+
+  const db=el('div','datebar');
+  db.innerHTML='<label>Session date</label>';
+  const di=el('input');di.type='date';di.value=draftDate;di.max=TODAY;
+  di.onchange=()=>{draftDate=di.value||TODAY;};
+  db.appendChild(di);
+  v.appendChild(db);
 
   const last=lastSession(sel);
   PLAN[sel].ex.forEach(e=>{
@@ -577,15 +626,57 @@ function renderTrain(){
   sr.appendChild(sv);sr.appendChild(rs);
   v.appendChild(sr);
 
-  // recent history
+  // history — tap to view / edit / delete
   if(state.sessions.length){
-    const h=el('div','card');h.innerHTML='<h2>Recent sessions</h2><div class="meta">Your last logged workouts</div>';
-    state.sessions.slice(-6).reverse().forEach(s=>{
-      h.appendChild(el('div','hist',
-        `<span class="h-d num">${prettyDate(s.date)}</span><span class="h-w ${s.w}">${PLAN[s.w].name}</span>`));
+    const h=el('div','card');h.innerHTML='<h2>History</h2><div class="meta">Tap a session to view, edit, or delete</div>';
+    sortedSessions().reverse().slice(0,14).forEach(s=>{
+      const k=keyOf(s);
+      const row=el('div','hist');
+      row.innerHTML=`<span class="h-d num">${prettyDate(s.date)}</span>
+        <span class="h-w ${s.w}">${PLAN[s.w].name}<span class="chev">  ${histEdit&&histEdit.key===k?'▲':'▼'}</span></span>`;
+      row.onclick=()=>{histEdit=(histEdit&&histEdit.key===k)?null:loadHistEdit(s,k);renderTrain();};
+      h.appendChild(row);
+      if(histEdit&&histEdit.key===k)h.appendChild(histDetail());
     });
     v.appendChild(h);
   }
+}
+function loadHistEdit(s,k){
+  const entries={};
+  PLAN[s.w].ex.forEach(e=>{const src=s.entries[e.id]||[];entries[e.id]=src.map(x=>Object.assign({},x));});
+  return {key:k,w:s.w,date:s.date,entries};
+}
+function histDetail(){
+  const w=histEdit.w;
+  const box=el('div','hist-detail');
+  const db=el('div','datebar');db.style.marginBottom='14px';
+  db.innerHTML='<label>Date</label>';
+  const di=el('input');di.type='date';di.value=histEdit.date;di.max=TODAY;
+  di.onchange=()=>{histEdit.date=di.value||histEdit.date;};
+  db.appendChild(di);box.appendChild(db);
+  PLAN[w].ex.forEach(e=>{
+    const arr=histEdit.entries[e.id];if(!arr)return;
+    const c=el('div');c.style.marginBottom='14px';
+    c.appendChild(el('div','ex-name',e.n));
+    arr.forEach((set,si)=>{
+      const rr=el('div','set');rr.appendChild(el('div','set-lab','S'+(si+1)));
+      if(e.m==='w'){rr.appendChild(stepper(set,'kg',2,'kg'));rr.appendChild(el('div','times','×'));rr.appendChild(stepper(set,'reps',1,''));}
+      else if(e.m==='r'){rr.appendChild(stepper(set,'reps',1,'reps'));}
+      else{rr.appendChild(stepper(set,'sec',5,'sec'));}
+      c.appendChild(rr);
+    });
+    box.appendChild(c);
+  });
+  const row=el('div','sync-row');row.style.marginTop='4px';
+  const sv=el('button','cta','Save changes');
+  sv.onclick=()=>{const t=findSession(histEdit.key);
+    if(t){t.date=histEdit.date;PLAN[w].ex.forEach(e=>{t.entries[e.id]=histEdit.entries[e.id].map(x=>Object.assign({},x));});save();}
+    histEdit=null;toast('Updated ✓');renderTrain();};
+  const del=el('button','cta ghost','Delete');del.style.color='var(--accent)';del.style.borderColor='var(--accent)';del._armed=false;
+  del.onclick=()=>{if(!del._armed){del._armed=true;del.textContent='Confirm delete';setTimeout(()=>{del._armed=false;del.textContent='Delete';},2500);return;}
+    const ix=sessionIndex(histEdit.key);if(ix>=0)state.sessions.splice(ix,1);save();histEdit=null;toast('Deleted');renderTrain();};
+  row.appendChild(sv);row.appendChild(del);box.appendChild(row);
+  return box;
 }
 function summ(e,arr){
   if(e.m==='w')return arr.map(s=>s.kg+'×'+s.reps).join('  ');
@@ -609,19 +700,24 @@ function stepper(set,key,step,unit){
   return wrap;
 }
 function saveSession(w){
-  // strip empty (all-zero weighted sets stay; it's user's choice). Save as-is.
   const entries={};
   PLAN[w].ex.forEach(e=>entries[e.id]=draft.entries[e.id].map(s=>Object.assign({},s)));
-  state.sessions.push({date:TODAY,w,entries});
-  state.steps[TODAY]=state.steps[TODAY]||(SCHED[new Date().getDay()]!=='cardio'); // training day counts toward activity
+  const d=draftDate||TODAY;
+  state.sessions.push({id:'s'+Date.now()+Math.floor(Math.random()*1e4),date:d,w,entries});
+  state.steps[d]=state.steps[d]||(SCHED[new Date(d+'T00:00:00').getDay()]!=='cardio');
   save();
-  draft=null;
-  toast(PLAN[w].name+' saved ✓');
+  draft=null;draftDate=TODAY;
+  toast(PLAN[w].name+(d===TODAY?' saved ✓':' logged for '+prettyDate(d)+' ✓'));
   renderTrain();
 }
 
 /* ---------- BODY ---------- */
-function latestScan(){return state.scans[state.scans.length-1];}
+function sortedScans(){
+  const base=state.scans.filter(s=>s.baseline);
+  const rest=state.scans.filter(s=>!s.baseline).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  return base.concat(rest);
+}
+function latestScan(){const o=sortedScans();return o[o.length-1];}
 function renderBody(){
   const v=$('#v-body');v.innerHTML='';
   v.appendChild(el('div','eyebrow','Composition vs target'));
@@ -647,7 +743,10 @@ function renderBody(){
 
   // add scan
   const f=el('div','card');
-  f.innerHTML='<h2>New Omron scan</h2><div class="meta">Same conditions each time: morning, hydrated, before eating. BMI auto-calculates from weight.</div>';
+  f.innerHTML='<h2>New Omron scan</h2><div class="meta">Same conditions each time: morning, hydrated, before eating. BMI auto-calculates from weight. Pick a past date to backfill a missed scan.</div>';
+  const dfl=el('div','field');dfl.innerHTML='<label>Scan date</label>';
+  const ddi=el('input');ddi.type='date';ddi.value=TODAY;ddi.max=TODAY;
+  dfl.appendChild(ddi);f.appendChild(dfl);
   const ids=['weight','fat','visceral','muscle','bodyage'];
   const labs={weight:'Weight (kg)',fat:'Body fat %',visceral:'Visceral fat',muscle:'Skeletal muscle %',bodyage:'Body age'};
   const g=el('div','grid2');
@@ -662,15 +761,15 @@ function renderBody(){
   const add=el('button','cta','Save scan');
   add.style.marginTop='4px';
   add.onclick=()=>{
-    const scan={date:TODAY};let any=false;
+    const d=ddi.value||TODAY;
+    const scan={date:d};let any=false;
     ids.forEach(id=>{const val=parseFloat(inputs[id].value);
       scan[id]=isNaN(val)?latest[id]:val;if(!isNaN(val))any=true;});
     scan.bmi=Math.round((scan.weight/(HEIGHT_M*HEIGHT_M))*10)/10;
     if(!any){toast('Enter at least one value');return;}
-    // replace if same date already logged
-    const ix=state.scans.findIndex(s=>s.date===TODAY);
+    const ix=state.scans.findIndex(s=>!s.baseline&&s.date===d);
     if(ix>=0)state.scans[ix]=scan;else state.scans.push(scan);
-    save();toast('Scan saved ✓');renderBody();renderToday();
+    save();toast(d===TODAY?'Scan saved ✓':'Scan saved for '+prettyDate(d)+' ✓');renderBody();
   };
   f.appendChild(add);
   v.appendChild(f);
@@ -678,16 +777,23 @@ function renderBody(){
   // scan history
   if(state.scans.length>1){
     const h=el('div','card');h.innerHTML='<h2>Scan history</h2>';
-    state.scans.slice().reverse().forEach(s=>{
-      h.appendChild(el('div','hist',
-        `<span class="h-d num">${s.baseline?'Baseline':prettyDate(s.date)}</span>
-         <span class="num" style="color:var(--muted)">${fmt(s.weight)}kg · ${fmt(s.fat)}% · VF ${fmt(s.visceral)}</span>`));
+    sortedScans().slice().reverse().forEach(s=>{
+      const row=el('div','hist');
+      row.innerHTML=`<span class="h-d num">${s.baseline?'Baseline':prettyDate(s.date)}</span>
+         <span class="num" style="color:var(--muted);flex:1;text-align:right">${fmt(s.weight)}kg · ${fmt(s.fat)}% · VF ${fmt(s.visceral)}</span>`;
+      if(!s.baseline){
+        const x=el('button','del-x','✕');x._armed=false;
+        x.onclick=()=>{if(!x._armed){x._armed=true;x.textContent='delete?';setTimeout(()=>{x._armed=false;x.textContent='✕';},2500);return;}
+          const ix=state.scans.indexOf(s);if(ix>=0)state.scans.splice(ix,1);save();toast('Scan deleted');renderBody();};
+        row.appendChild(x);
+      }
+      h.appendChild(row);
     });
     v.appendChild(h);
   }
 }
 function sparkline(id){
-  const pts=state.scans.map(s=>s[id]).filter(x=>typeof x==='number');
+  const pts=sortedScans().map(s=>s[id]).filter(x=>typeof x==='number');
   if(pts.length<2)return null;
   const w=300,h=34,p=3;
   const min=Math.min(...pts),max=Math.max(...pts),rng=(max-min)||1;
