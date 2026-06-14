@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0F1419">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Recomp · Training Log</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0F1419; --surface:#1A222C; --surface2:#222E3A; --line:#2C3845;
+    --txt:#EAF0F6; --muted:#8B99A9; --faint:#5C6776;
+    --accent:#FF6B35; --accent-soft:#FF6B3522;
+    --good:#34D399; --good-soft:#34D39922;
+    --warn:#F5A623;
+    --cool:#4DA6FF;
+    --r:16px; --r-sm:11px;
+    --display:'Space Grotesk',system-ui,sans-serif;
+    --body:'Inter',system-ui,-apple-system,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{background:var(--bg);color:var(--txt);font-family:var(--body);
+    font-size:16px;line-height:1.45;-webkit-font-smoothing:antialiased}
+  body{max-width:520px;margin:0 auto;min-height:100dvh;
+    padding-bottom:calc(78px + env(safe-area-inset-bottom));overflow-x:hidden}
+  .num{font-variant-numeric:tabular-nums}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  input{font-family:inherit;font-size:16px}
+
+  /* top bar */
+  header{position:sticky;top:0;z-index:30;background:rgba(15,20,25,.86);
+    backdrop-filter:blur(12px);border-bottom:1px solid var(--line);
+    padding:calc(14px + env(safe-area-inset-top)) 20px 14px;
+    display:flex;align-items:baseline;justify-content:space-between}
+  .brand{font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:-.01em}
+  .brand span{color:var(--accent)}
+  .today-date{font-size:12.5px;color:var(--muted);font-weight:500;letter-spacing:.02em}
+
+  main{padding:20px 16px 28px}
+  .view{display:none;animation:fade .25s ease}
+  .view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion:reduce){.view.active{animation:none}}
+
+  .eyebrow{font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--faint);font-weight:600;margin-bottom:10px}
+
+  /* hero */
+  .hero{border-radius:var(--r);padding:24px 22px;position:relative;overflow:hidden;
+    border:1px solid var(--line);background:
+    radial-gradient(120% 120% at 100% 0%, #243140 0%, var(--surface) 55%)}
+  .hero .day{font-size:13px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--muted);font-weight:600}
+  .hero .title{font-family:var(--display);font-weight:700;font-size:38px;
+    line-height:1.02;margin:8px 0 4px;letter-spacing:-.02em}
+  .hero .sub{color:var(--muted);font-size:14.5px;margin-bottom:20px}
+  .hero.train .title{color:var(--accent)}
+  .hero.walk .title{color:var(--cool)}
+  .hero.cardio .title{color:var(--good)}
+  .hero.rest .title{color:var(--txt)}
+
+  .cta{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;
+    padding:16px;border-radius:var(--r-sm);font-weight:600;font-size:16px;
+    background:var(--accent);color:#1a0f08;transition:transform .12s,filter .12s}
+  .cta:active{transform:scale(.985);filter:brightness(1.05)}
+  .cta.ghost{background:var(--surface2);color:var(--txt);border:1px solid var(--line)}
+  .cta svg{width:19px;height:19px}
+
+  /* step toggle */
+  .steprow{margin-top:14px;display:flex;align-items:center;gap:14px;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);
+    padding:14px 16px}
+  .steprow .lab{flex:1}
+  .steprow .lab b{font-weight:600;font-size:15px}
+  .steprow .lab small{display:block;color:var(--muted);font-size:12.5px;margin-top:1px}
+  .check{width:30px;height:30px;border-radius:9px;border:2px solid var(--faint);
+    display:grid;place-items:center;flex-shrink:0;transition:.15s}
+  .check.on{background:var(--cool);border-color:var(--cool)}
+  .check svg{width:16px;height:16px;opacity:0;transition:.15s;color:#06121f}
+  .check.on svg{opacity:1}
+
+  /* glance stats */
+  .glance{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+  .gstat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-sm);
+    padding:14px 12px;text-align:center}
+  .gstat .v{font-family:var(--display);font-weight:700;font-size:25px;line-height:1}
+  .gstat .l{font-size:11px;color:var(--muted);margin-top:6px;letter-spacing:.02em}
+  .gstat .d{font-size:11px;font-weight:600;margin-top:3px}
+  .up{color:var(--good)} .down{color:var(--good)} .flat{color:var(--faint)}
+
+  /* section card */
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    padding:18px;margin-bottom:14px}
+  .card h2{font-family:var(--display);font-weight:600;font-size:17px;margin-bottom:2px}
+  .card .meta{color:var(--muted);font-size:13px;margin-bottom:14px}
+
+  /* workout picker */
+  .seg{display:flex;gap:8px;margin-bottom:18px}
+  .seg button{flex:1;padding:13px;border-radius:var(--r-sm);background:var(--surface);
+    border:1px solid var(--line);font-weight:600;font-size:14px;color:var(--muted)}
+  .seg button.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+
+  /* exercise */
+  .ex{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    padding:16px;margin-bottom:12px}
+  .ex-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:4px}
+  .ex-name{font-weight:600;font-size:15.5px}
+  .ex-target{font-size:12px;color:var(--faint);white-space:nowrap}
+  .ex-last{font-size:12px;color:var(--muted);margin-bottom:12px}
+  .ex-last b{color:var(--good);font-weight:600}
+
+  .set{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  .set:last-child{margin-bottom:0}
+  .set-lab{width:30px;font-size:12px;color:var(--faint);font-weight:600;flex-shrink:0}
+  .stepper{display:flex;align-items:center;background:var(--bg);border:1px solid var(--line);
+    border-radius:10px;overflow:hidden;flex:1;min-width:0}
+  .stepper button{width:38px;height:46px;font-size:22px;color:var(--muted);flex-shrink:0;
+    display:grid;place-items:center;font-family:var(--display)}
+  .stepper button:active{background:var(--surface2);color:var(--accent)}
+  .stepper input{width:100%;min-width:0;height:46px;background:none;border:none;
+    text-align:center;color:var(--txt);font-weight:600;font-size:16px;
+    font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+  .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{
+    -webkit-appearance:none;margin:0}
+  .stepper:focus-within{border-color:var(--accent)}
+  .unit{font-size:11px;color:var(--faint);width:24px;text-align:center;flex-shrink:0}
+  .times{color:var(--faint);font-size:13px;flex-shrink:0}
+
+  .saverow{display:flex;gap:10px;margin-top:6px;margin-bottom:30px}
+  .saverow button{flex:1;padding:15px;border-radius:var(--r-sm);font-weight:600}
+  .save-main{background:var(--good);color:#062013}
+  .save-main:active{filter:brightness(1.06)}
+  .save-ghost{background:var(--surface);border:1px solid var(--line);color:var(--muted);flex:0 0 auto;padding:15px 18px}
+
+  /* body metrics */
+  .metric{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+    padding:16px;margin-bottom:11px}
+  .metric-top{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+  .metric .name{font-size:13px;color:var(--muted);font-weight:500}
+  .metric .now{font-family:var(--display);font-weight:700;font-size:30px;line-height:1;margin-top:3px}
+  .metric .now small{font-size:14px;color:var(--muted);font-weight:500;margin-left:3px}
+  .metric .right{text-align:right;flex-shrink:0}
+  .metric .delta{font-size:13px;font-weight:600}
+  .metric .tgt{font-size:11.5px;color:var(--faint);margin-top:3px}
+  .bar{height:6px;border-radius:3px;background:var(--bg);margin-top:13px;overflow:hidden}
+  .bar i{display:block;height:100%;border-radius:3px;background:var(--accent);transition:width .5s}
+  .bar i.good{background:var(--good)}
+  .spark{margin-top:12px;width:100%;height:34px;display:block}
+
+  /* forms */
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:12px;color:var(--muted);margin-bottom:6px;
+    letter-spacing:.02em;font-weight:500}
+  .field input,.field textarea{width:100%;background:var(--bg);border:1px solid var(--line);
+    border-radius:10px;padding:13px 14px;color:var(--txt);font-weight:500}
+  .field input:focus,.field textarea:focus{outline:none;border-color:var(--accent)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  textarea{font-family:ui-monospace,monospace;font-size:13px;resize:vertical;min-height:90px}
+
+  .hist{font-size:13px;border-top:1px solid var(--line);padding:12px 0;display:flex;
+    justify-content:space-between;gap:10px}
+  .hist:last-child{padding-bottom:0}
+  .hist .h-d{color:var(--muted)} .hist .h-w{font-weight:600}
+  .hist .h-w.A{color:var(--accent)} .hist .h-w.B{color:var(--cool)}
+
+  .empty{text-align:center;color:var(--faint);font-size:13.5px;padding:26px 10px;line-height:1.6}
+
+  .note{font-size:12.5px;color:var(--muted);line-height:1.6;background:var(--surface);
+    border:1px solid var(--line);border-radius:var(--r-sm);padding:14px 16px;margin-top:4px}
+  .note b{color:var(--txt)}
+
+  /* sync */
+  .status{display:flex;align-items:center;gap:9px;font-size:14.5px;font-weight:600;margin-bottom:4px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--faint);flex-shrink:0}
+  .dot.on{background:var(--good);box-shadow:0 0 0 4px var(--good-soft)}
+  .sub-sync{font-size:12.5px;color:var(--muted);margin:0 0 12px;line-height:1.55}
+  .sync-row{display:flex;gap:10px}
+  .sync-row button{flex:1}
+
+  /* toast */
+  #toast{position:fixed;left:50%;bottom:calc(94px + env(safe-area-inset-bottom));
+    transform:translateX(-50%) translateY(20px);background:var(--good);color:#062013;
+    font-weight:600;font-size:14px;padding:11px 20px;border-radius:30px;opacity:0;
+    pointer-events:none;transition:.28s;z-index:60;white-space:nowrap}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* bottom nav */
+  nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:520px;
+    z-index:40;background:rgba(15,20,25,.92);backdrop-filter:blur(14px);
+    border-top:1px solid var(--line);display:flex;
+    padding:8px 6px calc(8px + env(safe-area-inset-bottom))}
+  nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;
+    padding:6px 0;color:var(--faint);font-size:10.5px;font-weight:600;letter-spacing:.02em;
+    transition:color .15s}
+  nav button svg{width:23px;height:23px;stroke-width:2}
+  nav button.on{color:var(--accent)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">RE<span>·</span>COMP</div>
+  <div class="today-date num" id="topDate"></div>
+</header>
+
+<main>
+  <section class="view" id="v-today"></section>
+  <section class="view" id="v-train"></section>
+  <section class="view" id="v-body"></section>
+  <section class="view" id="v-data"></section>
+</main>
+
+<div id="toast"></div>
+
+<nav>
+  <button data-go="today" class="on">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 12l9-9 9 9M5 10v10h14V10" stroke-linecap="round" stroke-linejoin="round"/></svg>Today</button>
+  <button data-go="train">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6.5 6.5l11 11M4 9l2-2M9 4l-2 2M15 20l2-2M20 15l-2 2M4 4l3 3M17 17l3 3" stroke-linecap="round" stroke-linejoin="round"/></svg>Train</button>
+  <button data-go="body">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 17l5-5 4 4 8-9" stroke-linecap="round" stroke-linejoin="round"/><path d="M21 7v5M21 7h-5" stroke-linecap="round" stroke-linejoin="round"/></svg>Body</button>
+  <button data-go="data">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" stroke-linecap="round" stroke-linejoin="round"/></svg>Data</button>
+</nav>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+(function(){
+"use strict";
+
+/* ============================================================
+   GOOGLE DRIVE SYNC — paste your OAuth Client ID below.
+   Get it from Google Cloud Console (see the setup guide).
+   It looks like:  1234567890-abcdef.apps.googleusercontent.com
+   ============================================================ */
+const CLIENT_ID = 'PASTE_YOUR_CLIENT_ID_HERE';
+
+/* ---------- plan ---------- */
+const PLAN={
+  A:{name:'Strength A',focus:'Push + core',ex:[
+    {id:'gsq',n:'Goblet squat',t:'3 × 10–12',m:'w',s:3},
+    {id:'fpr',n:'DB floor press',t:'3 × 8–12',m:'w',s:3},
+    {id:'ohp',n:'DB overhead press',t:'3 × 8–12',m:'w',s:3},
+    {id:'hkr',n:'Hanging knee raises',t:'3 × 8–12',m:'r',s:3},
+    {id:'plk',n:'Plank',t:'3 × 30–60 sec',m:'t',s:3},
+    {id:'lat',n:'DB lateral raise',t:'2 × 12–15',m:'w',s:2},
+  ]},
+  B:{name:'Strength B',focus:'Pull + legs + core',ex:[
+    {id:'pul',n:'Pull-ups',t:'3 × max',m:'r',s:3},
+    {id:'rdl',n:'DB Romanian deadlift',t:'3 × 10–12',m:'w',s:3},
+    {id:'row',n:'DB single-arm row',t:'3 × 10–12 / side',m:'w',s:3},
+    {id:'lng',n:'DB reverse lunge',t:'3 × 10 / leg',m:'w',s:3},
+    {id:'twi',n:'DB Russian twist',t:'3 × 12 / side',m:'w',s:3},
+    {id:'cur',n:'DB hammer curl',t:'2 × 12',m:'w',s:2},
+  ]},
+};
+// 0=Sun..6=Sat
+const SCHED=['rest','A','walk','B','walk','fri','cardio'];
+
+const METRICS=[
+  {id:'weight',l:'Weight',u:'kg',base:76.1,tgt:71,dir:'down'},
+  {id:'fat',l:'Body fat',u:'%',base:23.4,tgt:19,dir:'down'},
+  {id:'visceral',l:'Visceral fat',u:'',base:11,tgt:9,dir:'down'},
+  {id:'muscle',l:'Skeletal muscle',u:'%',base:32.1,tgt:33.5,dir:'up'},
+  {id:'bodyage',l:'Body age',u:'yr',base:44,tgt:34,dir:'down'},
+  {id:'bmi',l:'BMI',u:'',base:26.3,tgt:24,dir:'down'},
+];
+const HEIGHT_M=1.70;
+
+/* ---------- state ---------- */
+const KEY='recomp_v1';
+let state=load();
+function load(){
+  try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r);}catch(e){}
+  return seed();
+}
+function seed(){
+  const base={};METRICS.forEach(m=>base[m.id]=m.base);
+  return {sessions:[],scans:[Object.assign({date:'Baseline',baseline:true},base)],steps:{},trainSel:null,updatedAt:0,lastSync:0};
+}
+function persistLocal(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+function save(){
+  state.updatedAt=Date.now();
+  persistLocal();
+  schedulePush();
+}
+
+/* ============================================================
+   DRIVE SYNC MODULE
+   Auth: Google Identity Services token flow (client-side).
+   Storage: a single JSON file in the hidden appDataFolder of
+   the user's own Drive. Strategy: pull on connect, push on save,
+   last-write-wins by updatedAt.
+   ============================================================ */
+const DRIVE_SCOPE='https://www.googleapis.com/auth/drive.appdata';
+const FILE_NAME='recomp-data.json';
+let tokenClient=null, gToken=null, gExpiry=0, driveFileId=null, pendingResolve=null, pushTimer=null;
+let initTries=0;
+
+function cloudConfigured(){return CLIENT_ID && CLIENT_ID.indexOf('PASTE_')<0;}
+function connected(){return !!gToken && Date.now()<gExpiry-60000;}
+
+function cloudInit(){
+  if(!cloudConfigured())return;
+  if(!(window.google&&google.accounts&&google.accounts.oauth2)){
+    if(initTries++<25)setTimeout(cloudInit,300);return;
+  }
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:CLIENT_ID, scope:DRIVE_SCOPE,
+    callback:(r)=>{
+      if(r&&r.access_token){gToken=r.access_token;gExpiry=Date.now()+((r.expires_in||3600)*1000);
+        localStorage.setItem('recomp_drive','1');}
+      const f=pendingResolve;pendingResolve=null;if(f)f(connected());
+    },
+    error_callback:()=>{const f=pendingResolve;pendingResolve=null;if(f)f(false);}
+  });
+  if(localStorage.getItem('recomp_drive')==='1'){
+    getToken(false).then(ok=>{ if(ok)syncNow().then(()=>refreshAll()); else refreshDataView(); });
+  }
+}
+function getToken(interactive){
+  return new Promise(res=>{
+    if(connected())return res(true);
+    if(!tokenClient)return res(false);
+    pendingResolve=res;
+    try{tokenClient.requestAccessToken({prompt:interactive?'consent':''});}
+    catch(e){pendingResolve=null;res(false);}
+    setTimeout(()=>{if(pendingResolve){const f=pendingResolve;pendingResolve=null;f(connected());}},7000);
+  });
+}
+async function ensureToken(){return connected()?true:await getToken(false);}
+
+async function driveFind(){
+  const q=encodeURIComponent("name='"+FILE_NAME+"'");
+  const r=await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&fields=files(id,modifiedTime)&q='+q,
+    {headers:{Authorization:'Bearer '+gToken}});
+  const j=await r.json();
+  if(j.files&&j.files.length){driveFileId=j.files[0].id;return j.files[0];}
+  return null;
+}
+async function driveRead(){
+  if(!driveFileId)return null;
+  const r=await fetch('https://www.googleapis.com/drive/v3/files/'+driveFileId+'?alt=media',
+    {headers:{Authorization:'Bearer '+gToken}});
+  if(!r.ok)return null;
+  try{return await r.json();}catch(e){return null;}
+}
+async function driveWrite(data){
+  const body=JSON.stringify(data);
+  if(driveFileId){
+    await fetch('https://www.googleapis.com/upload/drive/v3/files/'+driveFileId+'?uploadType=media',
+      {method:'PATCH',headers:{Authorization:'Bearer '+gToken,'Content-Type':'application/json'},body});
+  }else{
+    const boundary='recompbound'+Date.now();
+    const meta={name:FILE_NAME,parents:['appDataFolder']};
+    const mp='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(meta)+
+      '\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'+body+'\r\n--'+boundary+'--';
+    const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      {method:'POST',headers:{Authorization:'Bearer '+gToken,'Content-Type':'multipart/related; boundary='+boundary},body:mp});
+    const j=await r.json();driveFileId=j.id;
+  }
+}
+async function syncNow(){
+  if(!(await ensureToken()))return false;
+  try{
+    if(!driveFileId)await driveFind();
+    const remote=await driveRead();
+    const lu=state.updatedAt||0, ru=(remote&&remote.updatedAt)||0;
+    if(remote&&ru>lu){ state=remote; persistLocal(); }
+    else { await driveWrite(state); }
+    state.lastSync=Date.now(); persistLocal();
+    return true;
+  }catch(e){return false;}
+}
+function schedulePush(){
+  if(!cloudConfigured()||localStorage.getItem('recomp_drive')!=='1')return;
+  clearTimeout(pushTimer);
+  pushTimer=setTimeout(async()=>{
+    if(!(await ensureToken()))return;
+    try{ if(!driveFileId)await driveFind(); await driveWrite(state);
+      state.lastSync=Date.now(); persistLocal(); setLastSyncText(); }catch(e){}
+  },1500);
+}
+async function connectDrive(){
+  if(!cloudConfigured()){toast('Add your Client ID first');return;}
+  const ok=await getToken(true);
+  if(ok){ await syncNow(); toast('Connected ✓'); refreshAll(); }
+  else toast('Connection cancelled');
+  renderData();
+}
+function disconnectDrive(){
+  try{if(window.google&&gToken)google.accounts.oauth2.revoke(gToken,()=>{});}catch(e){}
+  gToken=null;gExpiry=0;driveFileId=null;
+  localStorage.removeItem('recomp_drive');
+  toast('Disconnected');
+}
+function timeAgo(ts){
+  const s=Math.round((Date.now()-ts)/1000);
+  if(s<60)return 'just now';
+  if(s<3600)return Math.round(s/60)+' min ago';
+  if(s<86400)return Math.round(s/3600)+' hr ago';
+  return Math.round(s/86400)+' d ago';
+}
+function setLastSyncText(){const e=document.getElementById('lastSync');if(e&&state.lastSync)e.textContent='Last synced '+timeAgo(state.lastSync);}
+function refreshAll(){if(renderers[currentTab])renderers[currentTab]();}
+function refreshDataView(){if(currentTab==='data')renderData();}
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;if(h!=null)e.innerHTML=h;return e;};
+const pad=n=>String(n).padStart(2,'0');
+function isoDate(d){d=d||new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
+function prettyDate(s){
+  if(s==='Baseline')return 'Baseline';
+  const d=new Date(s+'T00:00:00');
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+}
+const TODAY=isoDate();
+function dayName(){return new Date().toLocaleDateString(undefined,{weekday:'long'});}
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');
+  clearTimeout(t._tm);t._tm=setTimeout(()=>t.classList.remove('show'),1700);}
+const CHK='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M4 12l5 5L20 6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+function lastSession(w){
+  for(let i=state.sessions.length-1;i>=0;i--)if(state.sessions[i].w===w)return state.sessions[i];
+  return null;
+}
+function suggestedFriday(){
+  const a=lastSession('A'),b=lastSession('B');
+  if(!a)return 'A';if(!b)return 'B';
+  return (a.date>=b.date)?'B':'A';   // do the one done less recently
+}
+function todayWorkout(){
+  const code=SCHED[new Date().getDay()];
+  if(code==='fri')return suggestedFriday();
+  if(code==='A'||code==='B')return code;
+  return null;
+}
+
+/* ---------- router ---------- */
+let currentTab='today';
+function go(tab){
+  currentTab=tab;
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  $('#v-'+tab).classList.add('active');
+  document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.go===tab));
+  window.scrollTo(0,0);
+  renderers[tab]();
+}
+document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>go(b.dataset.go));
+
+/* ---------- TODAY ---------- */
+function renderToday(){
+  const v=$('#v-today');v.innerHTML='';
+  const code=SCHED[new Date().getDay()];
+  const w=todayWorkout();
+  const hero=el('div','hero');
+  let kind='rest',title='Rest day',sub='Recovery still builds muscle. Protein + sleep today.';
+  if(w){kind='train';title=PLAN[w].name.toUpperCase();sub=PLAN[w].focus+'  ·  ~45 min';}
+  else if(code==='walk'){kind='walk';title='Walk day';sub='10k commute steps — keep it easy.';}
+  else if(code==='cardio'){kind='cardio';title='Cardio';sub='Easy bike 45–60 min, or rope intervals ~20 min.';}
+  hero.classList.add(kind);
+  hero.innerHTML=`<div class="day">${dayName()}</div><div class="title">${title}</div><div class="sub">${sub}</div>`;
+  if(w){
+    const btn=el('button','cta','Log this workout <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>');
+    btn.onclick=()=>{state.trainSel=w;save();go('train');};
+    hero.appendChild(btn);
+  }else if(code==='cardio'){
+    const btn=el('button','cta',markStep(TODAY)?'Cardio done ✓':'Mark cardio done');
+    if(markStep(TODAY))btn.style.background='var(--good)';
+    btn.onclick=()=>{toggleStep(TODAY);renderToday();toast(markStep(TODAY)?'Nice work':'Unmarked');};
+    hero.appendChild(btn);
+  }
+  v.appendChild(hero);
+
+  // step toggle (always available)
+  const sr=el('div','steprow');
+  const done=markStep(TODAY);
+  sr.innerHTML=`<div class="lab"><b>10k steps today</b><small>${stepsThisWeek()} / 4 commute days this week</small></div>
+    <div class="check ${done?'on':''}">${CHK}</div>`;
+  sr.onclick=()=>{toggleStep(TODAY);renderToday();};
+  v.appendChild(sr);
+
+  // glance stats
+  const latest=latestScan();
+  const g=el('div','glance');
+  [['visceral','Visceral'],['muscle','Muscle %'],['bodyage','Body age']].forEach(([id,lab])=>{
+    const m=METRICS.find(x=>x.id===id);
+    const cur=latest[id], delta=cur-m.base;
+    let cls='flat',arrow='–';
+    if(Math.abs(delta)>0.05){const improving=(m.dir==='down'?delta<0:delta>0);
+      cls=improving?'down':'up';arrow=(delta>0?'+':'')+(+delta.toFixed(1));}
+    g.appendChild(el('div','gstat',
+      `<div class="v num">${fmt(cur)}</div><div class="l">${lab}</div><div class="d ${cls}">${arrow}</div>`));
+  });
+  v.appendChild(g);
+
+  v.appendChild(el('div','note','<b>Tip.</b> Log your weights <b>during</b> the session, not after — beating last week’s numbers is the whole game. Watch the visceral-fat and muscle figures above creep toward target.'));
+}
+function fmt(n){return (Math.round(n*10)/10).toString();}
+
+/* ---------- steps ---------- */
+function markStep(d){return !!state.steps[d];}
+function toggleStep(d){state.steps[d]=!state.steps[d];if(!state.steps[d])delete state.steps[d];save();}
+function stepsThisWeek(){
+  const now=new Date();const day=(now.getDay()+6)%7; // 0=Mon
+  const mon=new Date(now);mon.setDate(now.getDate()-day);
+  let c=0;for(let i=0;i<7;i++){const dd=new Date(mon);dd.setDate(mon.getDate()+i);if(state.steps[isoDate(dd)])c++;}
+  return Math.min(c,4);
+}
+
+/* ---------- TRAIN ---------- */
+let draft=null; // {w, entries:{id:[{...}]}}
+function startDraft(w){
+  const last=lastSession(w);
+  const entries={};
+  PLAN[w].ex.forEach(e=>{
+    entries[e.id]=[];
+    const prev=last&&last.entries[e.id];
+    for(let i=0;i<e.s;i++){
+      const p=prev&&prev[i];
+      if(e.m==='w')entries[e.id].push({kg:p?p.kg:0,reps:p?p.reps:10});
+      else if(e.m==='r')entries[e.id].push({reps:p?p.reps:8});
+      else entries[e.id].push({sec:p?p.sec:40});
+    }
+  });
+  draft={w,entries};
+}
+function renderTrain(){
+  const v=$('#v-train');v.innerHTML='';
+  const sel=state.trainSel||todayWorkout()||'A';
+  if(!draft||draft.w!==sel)startDraft(sel);
+
+  v.appendChild(el('div','eyebrow','Log a session'));
+  const seg=el('div','seg');
+  ['A','B'].forEach(w=>{
+    const b=el('button',w===sel?'on':'',PLAN[w].name);
+    b.onclick=()=>{state.trainSel=w;save();startDraft(w);renderTrain();};
+    seg.appendChild(b);
+  });
+  v.appendChild(seg);
+
+  const last=lastSession(sel);
+  PLAN[sel].ex.forEach(e=>{
+    const card=el('div','ex');
+    card.innerHTML=`<div class="ex-head"><div class="ex-name">${e.n}</div><div class="ex-target">${e.t}</div></div>`;
+    if(last&&last.entries[e.id]){
+      card.appendChild(el('div','ex-last','Last: <b>'+summ(e,last.entries[e.id])+'</b>'));
+    }else{
+      card.appendChild(el('div','ex-last','First time — log it to set a baseline.'));
+    }
+    draft.entries[e.id].forEach((set,si)=>{
+      const row=el('div','set');
+      row.appendChild(el('div','set-lab','S'+(si+1)));
+      if(e.m==='w'){
+        row.appendChild(stepper(set,'kg',2,'kg'));
+        row.appendChild(el('div','times','×'));
+        row.appendChild(stepper(set,'reps',1,''));
+      }else if(e.m==='r'){
+        row.appendChild(stepper(set,'reps',1,'reps'));
+      }else{
+        row.appendChild(stepper(set,'sec',5,'sec'));
+      }
+      card.appendChild(row);
+    });
+    v.appendChild(card);
+  });
+
+  const sr=el('div','saverow');
+  const sv=el('button','save-main','Save '+PLAN[sel].name);
+  sv.onclick=()=>saveSession(sel);
+  const rs=el('button','save-ghost','Reset');
+  rs.onclick=()=>{startDraft(sel);renderTrain();toast('Reset to last session');};
+  sr.appendChild(sv);sr.appendChild(rs);
+  v.appendChild(sr);
+
+  // recent history
+  if(state.sessions.length){
+    const h=el('div','card');h.innerHTML='<h2>Recent sessions</h2><div class="meta">Your last logged workouts</div>';
+    state.sessions.slice(-6).reverse().forEach(s=>{
+      h.appendChild(el('div','hist',
+        `<span class="h-d num">${prettyDate(s.date)}</span><span class="h-w ${s.w}">${PLAN[s.w].name}</span>`));
+    });
+    v.appendChild(h);
+  }
+}
+function summ(e,arr){
+  if(e.m==='w')return arr.map(s=>s.kg+'×'+s.reps).join('  ');
+  if(e.m==='r')return arr.map(s=>s.reps).join('  ')+' reps';
+  return arr.map(s=>s.sec+'s').join('  ');
+}
+function stepper(set,key,step,unit){
+  const wrap=el('div','stepper');
+  const minus=el('button',null,'−');
+  const inp=el('input');inp.type='number';inp.value=set[key];
+  inp.inputMode=(key==='kg')?'decimal':'numeric';
+  const plus=el('button',null,'+');
+  const clamp=val=>{val=Math.max(0,Math.round(val*10)/10);set[key]=val;inp.value=val;};
+  minus.onclick=()=>clamp((+inp.value||0)-step);
+  plus.onclick=()=>clamp((+inp.value||0)+step);
+  inp.onchange=()=>clamp(+inp.value||0);
+  wrap.appendChild(minus);wrap.appendChild(inp);wrap.appendChild(plus);
+  if(unit){const u=el('div','unit',unit);
+    const cont=el('div','stepper');cont.style.border='none';cont.style.background='none';
+    cont.appendChild(wrap);cont.appendChild(u);cont.style.flex='1';cont.style.gap='6px';return cont;}
+  return wrap;
+}
+function saveSession(w){
+  // strip empty (all-zero weighted sets stay; it's user's choice). Save as-is.
+  const entries={};
+  PLAN[w].ex.forEach(e=>entries[e.id]=draft.entries[e.id].map(s=>Object.assign({},s)));
+  state.sessions.push({date:TODAY,w,entries});
+  state.steps[TODAY]=state.steps[TODAY]||(SCHED[new Date().getDay()]!=='cardio'); // training day counts toward activity
+  save();
+  draft=null;
+  toast(PLAN[w].name+' saved ✓');
+  renderTrain();
+}
+
+/* ---------- BODY ---------- */
+function latestScan(){return state.scans[state.scans.length-1];}
+function renderBody(){
+  const v=$('#v-body');v.innerHTML='';
+  v.appendChild(el('div','eyebrow','Composition vs target'));
+  const latest=latestScan();
+  METRICS.forEach(m=>{
+    const cur=latest[m.id];
+    const delta=cur-m.base;
+    const improving=(m.dir==='down'?delta<0:delta>0);
+    let dtxt='No change',dcls='flat';
+    if(Math.abs(delta)>0.05){dtxt=(delta>0?'+':'')+fmt(delta)+' '+m.u;dcls=improving?'down':'up';}
+    // progress base->target
+    const span=m.base-m.tgt;
+    let pct=span!==0?((m.base-cur)/span)*100:0;pct=Math.max(0,Math.min(100,pct));
+    const card=el('div','metric');
+    card.innerHTML=`<div class="metric-top">
+        <div><div class="name">${m.l}</div><div class="now num">${fmt(cur)}<small>${m.u}</small></div></div>
+        <div class="right"><div class="delta ${dcls}">${dtxt}</div><div class="tgt num">target ${fmt(m.tgt)}${m.u}</div></div>
+      </div>
+      <div class="bar"><i class="${pct>=100?'good':''}" style="width:${pct}%"></i></div>`;
+    const sk=sparkline(m.id);if(sk)card.appendChild(sk);
+    v.appendChild(card);
+  });
+
+  // add scan
+  const f=el('div','card');
+  f.innerHTML='<h2>New Omron scan</h2><div class="meta">Same conditions each time: morning, hydrated, before eating. BMI auto-calculates from weight.</div>';
+  const ids=['weight','fat','visceral','muscle','bodyage'];
+  const labs={weight:'Weight (kg)',fat:'Body fat %',visceral:'Visceral fat',muscle:'Skeletal muscle %',bodyage:'Body age'};
+  const g=el('div','grid2');
+  const inputs={};
+  ids.forEach(id=>{
+    const fl=el('div','field');
+    fl.innerHTML=`<label>${labs[id]}</label>`;
+    const i=el('input');i.type='number';i.inputMode='decimal';i.placeholder=fmt(latest[id]);
+    inputs[id]=i;fl.appendChild(i);g.appendChild(fl);
+  });
+  f.appendChild(g);
+  const add=el('button','cta','Save scan');
+  add.style.marginTop='4px';
+  add.onclick=()=>{
+    const scan={date:TODAY};let any=false;
+    ids.forEach(id=>{const val=parseFloat(inputs[id].value);
+      scan[id]=isNaN(val)?latest[id]:val;if(!isNaN(val))any=true;});
+    scan.bmi=Math.round((scan.weight/(HEIGHT_M*HEIGHT_M))*10)/10;
+    if(!any){toast('Enter at least one value');return;}
+    // replace if same date already logged
+    const ix=state.scans.findIndex(s=>s.date===TODAY);
+    if(ix>=0)state.scans[ix]=scan;else state.scans.push(scan);
+    save();toast('Scan saved ✓');renderBody();renderToday();
+  };
+  f.appendChild(add);
+  v.appendChild(f);
+
+  // scan history
+  if(state.scans.length>1){
+    const h=el('div','card');h.innerHTML='<h2>Scan history</h2>';
+    state.scans.slice().reverse().forEach(s=>{
+      h.appendChild(el('div','hist',
+        `<span class="h-d num">${s.baseline?'Baseline':prettyDate(s.date)}</span>
+         <span class="num" style="color:var(--muted)">${fmt(s.weight)}kg · ${fmt(s.fat)}% · VF ${fmt(s.visceral)}</span>`));
+    });
+    v.appendChild(h);
+  }
+}
+function sparkline(id){
+  const pts=state.scans.map(s=>s[id]).filter(x=>typeof x==='number');
+  if(pts.length<2)return null;
+  const w=300,h=34,p=3;
+  const min=Math.min(...pts),max=Math.max(...pts),rng=(max-min)||1;
+  const step=(w-p*2)/(pts.length-1);
+  const xy=pts.map((v,i)=>[p+i*step,h-p-((v-min)/rng)*(h-p*2)]);
+  const d=xy.map((c,i)=>(i?'L':'M')+c[0].toFixed(1)+' '+c[1].toFixed(1)).join(' ');
+  const m=METRICS.find(x=>x.id===id);
+  const improving=m.dir==='down'?pts[pts.length-1]<pts[0]:pts[pts.length-1]>pts[0];
+  const col=improving?'var(--good)':'var(--accent)';
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('class','spark');svg.setAttribute('viewBox',`0 0 ${w} ${h}`);
+  svg.setAttribute('preserveAspectRatio','none');
+  svg.innerHTML=`<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${xy[xy.length-1][0].toFixed(1)}" cy="${xy[xy.length-1][1].toFixed(1)}" r="3" fill="${col}"/>`;
+  return svg;
+}
+
+/* ---------- DATA ---------- */
+function renderData(){
+  const v=$('#v-data');v.innerHTML='';
+
+  // --- cloud sync ---
+  v.appendChild(el('div','eyebrow','Cloud sync'));
+  const cc=el('div','card sync-card');
+  if(!cloudConfigured()){
+    cc.innerHTML='<h2>Set up Google Drive sync</h2><div class="meta">Not configured yet. Open this file in a text editor, paste your Google OAuth Client ID where it says <b>PASTE_YOUR_CLIENT_ID_HERE</b> near the top, re-upload it, then reload. Step-by-step instructions are in the setup guide.</div>';
+    v.appendChild(cc);
+  }else if(connected()){
+    cc.innerHTML=`<h2>Google Drive</h2>
+      <div class="status"><span class="dot on"></span>Connected &amp; syncing</div>
+      <div class="sub-sync" id="lastSync">${state.lastSync?('Last synced '+timeAgo(state.lastSync)):'Syncing…'}</div>`;
+    const row=el('div','sync-row');
+    const s=el('button','cta','Sync now');
+    s.onclick=async()=>{s.textContent='Syncing…';await syncNow();renderData();refreshAll();toast('Synced ✓');};
+    const d=el('button','cta ghost','Disconnect');
+    d.onclick=()=>{disconnectDrive();renderData();};
+    row.appendChild(s);row.appendChild(d);cc.appendChild(row);
+    v.appendChild(cc);
+  }else{
+    cc.innerHTML='<h2>Google Drive</h2><div class="status"><span class="dot"></span>Not connected</div><div class="sub-sync">Sign in once on each device to sync your log automatically between your phone and iPad.</div>';
+    const con=el('button','cta','Connect Google Drive');con.onclick=connectDrive;
+    cc.appendChild(con);
+    cc.appendChild(el('div','sub-sync','First time, Google shows an “unverified app” notice — that’s normal for a private project. Tap <b>Advanced → continue</b>. Your data is written only to your own Drive.'));
+    v.appendChild(cc);
+  }
+
+  v.appendChild(el('div','eyebrow','Manual backup'));
+  const c=el('div','card');
+  c.innerHTML='<h2>Move data between devices</h2><div class="meta">This app stores everything on this device only. To carry progress between your phone and iPad, export here and import on the other.</div>';
+  const ex=el('button','cta','Copy backup to clipboard');ex.style.marginBottom='10px';
+  ex.onclick=async()=>{const txt=JSON.stringify(state);
+    try{await navigator.clipboard.writeText(txt);toast('Copied ✓');}
+    catch(e){ta.value=txt;toast('Copied to box below');}};
+  const dl=el('button','cta ghost','Download backup file');dl.style.marginBottom='14px';
+  dl.onclick=()=>{const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+    a.download='recomp-backup-'+TODAY+'.json';a.click();URL.revokeObjectURL(a.href);};
+  c.appendChild(ex);c.appendChild(dl);
+
+  const fl=el('div','field');
+  fl.innerHTML='<label>Paste a backup here, then tap Import</label>';
+  const ta=el('textarea');ta.placeholder='{ "sessions": ... }';fl.appendChild(ta);
+  c.appendChild(fl);
+  const imp=el('button','cta','Import data');
+  imp.onclick=()=>{try{const d=JSON.parse(ta.value);
+    if(!d.sessions||!d.scans)throw 0;
+    state=d;save();toast('Imported ✓');go('today');}
+    catch(e){toast('That doesn’t look like a valid backup');}};
+  c.appendChild(imp);
+  v.appendChild(c);
+
+  v.appendChild(el('div','note','<b>Make it feel like an app.</b> In Chrome on Android or Safari on iPad, open the menu and choose <b>Add to Home Screen</b>. It’ll launch full-screen with its own icon.'));
+
+  const danger=el('div','card');
+  danger.innerHTML='<h2>Start over</h2><div class="meta">Wipes all sessions, scans, and steps on this device. Can’t be undone.</div>';
+  const rb=el('button','cta ghost','Reset all data');
+  rb.style.color='var(--accent)';rb.style.borderColor='var(--accent)';
+  rb._armed=false;
+  rb.onclick=()=>{if(!rb._armed){rb._armed=true;rb.textContent='Tap again to confirm';
+    setTimeout(()=>{rb._armed=false;rb.textContent='Reset all data';},2500);return;}
+    state=seed();save();draft=null;toast('Reset');go('today');};
+  danger.appendChild(rb);
+  v.appendChild(danger);
+}
+
+/* ---------- init ---------- */
+const renderers={today:renderToday,train:renderTrain,body:renderBody,data:renderData};
+$('#topDate').textContent=new Date().toLocaleDateString(undefined,{month:'short',day:'numeric'});
+go('today');
+cloudInit();
+})();
+</script>
+</body>
+</html>
