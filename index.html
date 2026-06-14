@@ -198,6 +198,14 @@
     border-radius:7px;flex-shrink:0;font-weight:600}
   .del-x:active{color:var(--accent);border-color:var(--accent)}
 
+  /* progress chart */
+  .prog-sel{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;color:var(--txt);font-weight:600;font-size:15px;margin-bottom:6px;color-scheme:dark}
+  .prog-sel:focus{outline:none;border-color:var(--accent)}
+  .chart{width:100%;height:auto;display:block;margin-top:10px}
+  .prog-cap{font-size:13px;color:var(--muted);text-align:center;margin-top:8px}
+  .prog-cap b{color:var(--txt);font-family:var(--display)}
+
   /* toast */
   #toast{position:fixed;left:50%;bottom:calc(94px + env(safe-area-inset-bottom));
     transform:translateX(-50%) translateY(20px);background:var(--good);color:#062013;
@@ -276,6 +284,11 @@ const PLAN={
 };
 // 0=Sun..6=Sat
 const SCHED=['rest','A','walk','B','walk','fri','cardio'];
+
+const EX_INDEX={};
+['A','B'].forEach(w=>PLAN[w].ex.forEach(e=>{EX_INDEX[e.id]={e,w};}));
+function findEx(id){return EX_INDEX[id]&&EX_INDEX[id].e;}
+function exWorkout(id){return EX_INDEX[id]&&EX_INDEX[id].w;}
 
 const METRICS=[
   {id:'weight',l:'Weight',u:'kg',base:76.1,tgt:71,dir:'down'},
@@ -555,6 +568,45 @@ function stepsThisWeek(){
 let draft=null; // {w, entries:{id:[{...}]}}
 let draftDate=TODAY;
 let histEdit=null; // {key,w,date,entries}
+let progEx='gsq';
+
+function exMetric(e,arr){
+  if(e.m==='w'){ let best=0; arr.forEach(s=>{ if(s.kg>0&&s.reps>0){const v=s.kg*(1+s.reps/30); if(v>best)best=v;} });
+    return best>0?Math.round(best*10)/10:null; }
+  if(e.m==='r'){ const t=arr.reduce((a,s)=>a+(+s.reps||0),0); return t>0?t:null; }
+  const m=Math.max(0,...arr.map(s=>+s.sec||0)); return m>0?m:null;
+}
+function exUnit(e){return e.m==='w'?'kg e1RM':e.m==='r'?'reps':'sec';}
+function exPoints(id){
+  const e=findEx(id),w=exWorkout(id),pts=[];
+  sortedSessions().forEach(s=>{ if(s.w===w&&s.entries[id]){const v=exMetric(e,s.entries[id]);if(v!=null)pts.push({date:s.date,val:v});} });
+  return pts;
+}
+function lineChart(points){
+  const W=320,H=148,pl=10,pr=12,pt=16,pb=22;
+  const vals=points.map(p=>p.val);
+  let min=Math.min(...vals),max=Math.max(...vals);
+  if(min===max){min-=1;max+=1;}
+  const rng=max-min,n=points.length;
+  const x=i=> n===1?W/2:pl+(i*(W-pl-pr)/(n-1));
+  const y=v=>(H-pb)-((v-min)/rng)*((H-pb)-pt);
+  const xy=points.map((p,i)=>[x(i),y(p.val)]);
+  const line=xy.map((c,i)=>(i?'L':'M')+c[0].toFixed(1)+' '+c[1].toFixed(1)).join(' ');
+  const area='M'+xy[0][0].toFixed(1)+' '+(H-pb)+' '+xy.map(c=>'L'+c[0].toFixed(1)+' '+c[1].toFixed(1)).join(' ')+' L'+xy[n-1][0].toFixed(1)+' '+(H-pb)+' Z';
+  const dots=xy.map((c,i)=>`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="${i===n-1?3.6:2.4}" fill="${i===n-1?'var(--accent)':'var(--cool)'}"/>`).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">
+    <defs><linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+    <path d="${area}" fill="url(#pg)"/>
+    <path d="${line}" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    ${dots}
+    <text x="${pl}" y="${pt-5}" fill="var(--faint)" font-size="9">${fmt(max)}</text>
+    <text x="${pl}" y="${H-pb+1}" fill="var(--faint)" font-size="9">${fmt(min)}</text>
+    <text x="${pl}" y="${H-6}" fill="var(--faint)" font-size="9">${prettyDate(points[0].date)}</text>
+    <text x="${W-pr}" y="${H-6}" fill="var(--faint)" font-size="9" text-anchor="end">${prettyDate(points[n-1].date)}</text>
+  </svg>`;
+}
 function startDraft(w){
   const last=lastSession(w);
   const entries={};
@@ -625,6 +677,33 @@ function renderTrain(){
   rs.onclick=()=>{startDraft(sel);renderTrain();toast('Reset to last session');};
   sr.appendChild(sv);sr.appendChild(rs);
   v.appendChild(sr);
+
+  // progress chart
+  const pc=el('div','card');
+  pc.innerHTML='<h2>Progress</h2><div class="meta">Strength trend per exercise. Weighted lifts show estimated 1‑rep max, so the line rises whether you add weight or reps.</div>';
+  const psel=el('select','prog-sel');
+  ['A','B'].forEach(w=>{
+    const og=document.createElement('optgroup');og.label=PLAN[w].name;
+    PLAN[w].ex.forEach(e=>{const o=document.createElement('option');o.value=e.id;o.textContent=e.n;if(e.id===progEx)o.selected=true;og.appendChild(o);});
+    psel.appendChild(og);
+  });
+  const pbody=el('div');
+  function fillProg(){
+    pbody.innerHTML='';
+    const e=findEx(progEx),pts=exPoints(progEx);
+    if(pts.length>=2){
+      pbody.insertAdjacentHTML('beforeend',lineChart(pts));
+      const last=pts[pts.length-1].val,d=last-pts[0].val;
+      const cap=el('div','prog-cap');
+      cap.innerHTML=`Latest <b>${fmt(last)} ${exUnit(e)}</b> · <span style="color:${d>=0?'var(--good)':'var(--accent)'};font-weight:600">${d>=0?'+':''}${fmt(d)}</span> since ${prettyDate(pts[0].date)}`;
+      pbody.appendChild(cap);
+    }else{
+      pbody.appendChild(el('div','empty','Log '+(e?e.n:'this exercise')+' in at least two sessions to see your trend.'));
+    }
+  }
+  psel.onchange=()=>{progEx=psel.value;fillProg();};
+  pc.appendChild(psel);pc.appendChild(pbody);fillProg();
+  v.appendChild(pc);
 
   // history — tap to view / edit / delete
   if(state.sessions.length){
